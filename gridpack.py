@@ -1,4 +1,5 @@
 import os
+import fileinput
 import logging
 import shutil
 import pathlib
@@ -214,14 +215,79 @@ class Gridpack():
         self.logger.debug('Writing customized scheme file %s', customized_file)
         with open(customized_file, 'w') as scheme_file:
             scheme_file.write(scheme)
+            
+    def prepare_powheg_card(self):
+        
+        """
+        Create Powheg cards from templates and user specific input
+        """
+        self.logger.debug('Start preparing powheg card')
+        # create new powheg steering file 
+        local_cards_path = os.path.join(self.local_dir(), 'input_cards')
+        pathlib.Path(local_cards_path).mkdir(parents=True, exist_ok=True)
+        powheg_steering_file= os.path.join(local_cards_path, 'powheg.input')
+        powheg_steering = open(powheg_steering_file, 'wt')        
+        # fill with content of process specific template and adjust settings like beam energy, ...
+        files_path = Config.get('gridpack_files_path')
+        generator = self.data['generator']
+        process = self.data['process']
+        process_template_file = os.path.join(files_path, 'cards', generator, 'template', process+'.input')
+        beam = str(self.data['beam'])
+        # agrohsje: still sync strategy for PDF and fix pdf input 
+        pdf = "325300"
+        for line in fileinput.input(files = process_template_file):         
+            line = line.replace('$ebeam1', beam)
+            line = line.replace('$ebeam2', beam)
+            line = line.replace('$pdf1', pdf)
+            line = line.replace('$pdf2', pdf)
+            powheg_steering.write(line)
+        powheg_steering.close()
+        
+        # add campaign and user specific settings to powheg steering file 
+        powheg_steering = open(powheg_steering_file, 'a')        
+        # append campaign specific settings for process 
+        campaign = self.data['campaign']
+        modelparams_file = os.path.join(files_path, 'campaigns', campaign, 'template', generator, 'modelparams')+'/'+process+'.input'
+        self.logger.debug('Appeding content of %s to %s', modelparams_file, powheg_steering_file)
+        modelparams = open(modelparams_file, 'r')
+        powheg_steering.write(modelparams.read())
+        # append user specific settings 
+        dataset_dict = self.get_dataset_dict()
+        for user_line in dataset_dict.get('powheg_card', []):
+            self.logger.debug('Appeding %s', user_line)
+            powheg_steering.write(user_line+'\n')
+        powheg_steering.close()
 
+    def prepare_procname_card(self):
+
+        """
+        Create card with just the process name for proper Powheg gridpack production 
+        """
+        self.logger.debug('Preparing card with Powheg process name')
+        local_cards_path = os.path.join(self.local_dir(), 'input_cards')
+        pathlib.Path(local_cards_path).mkdir(parents=True, exist_ok=True)
+        process_name_file= os.path.join(local_cards_path, 'process.input')
+        process_name = open(process_name_file, 'wt')        
+        process = self.data['process']        
+        process_name.write(process+'\n')
+        process_name.close()
+        
     def prepare_card_archive(self):
         """
         Make an archive with all necessary card files
         """
-        self.prepare_default_card()
-        self.prepare_run_card()
-        self.prepare_customize_card()
+        generator = self.data["generator"]
+        if generator == "Madgraph5_aMCatNLO":
+            self.prepare_default_card()
+            self.prepare_run_card()
+            self.prepare_customize_card()
+        elif generator == "Powheg":
+            self.prepare_powheg_card()
+            self.prepare_procname_card()
+        else:
+            self.logger.error('Generator=%s unknown', generator)
+            raise Exception()
+
         local_dir = self.local_dir()
         os.system(f"tar -czvf {local_dir}/input_cards.tar.gz -C {local_dir} input_cards")
 
