@@ -145,7 +145,7 @@ class Gridpack():
         process = self.data['process']
         dataset_name = self.data['dataset']
         files_dir = Config.get('gridpack_files_path')
-        cards_path = os.path.join(files_dir, 'cards', generator, process, dataset_name)
+        cards_path = os.path.join(files_dir, 'cards', generator, process, dataset_name) 
         local_cards_path = os.path.join(self.local_dir(), 'input_cards')
         pathlib.Path(local_cards_path).mkdir(parents=True, exist_ok=True)
         self.logger.debug('Copying %s/*.dat to %s', cards_path, local_cards_path)
@@ -159,12 +159,12 @@ class Gridpack():
         generator = self.data['generator']
         dataset_name = self.data['dataset']
         files_dir = Config.get('gridpack_files_path')
-        tamplate_path = os.path.join(files_dir, 'campaigns', campaign, 'template', generator, 'run_card')
+        template_path = os.path.join(files_dir, 'campaigns', campaign, generator, 'templates')
         run_card_file_path = os.path.join(self.local_dir(), 'input_cards', f'{dataset_name}_run_card.dat')
         if dataset_name.rsplit("_", 1)[1].startswith("amcatnlo"):
-            os.system(f"cp {tamplate_path}/NLO_run_card.dat {run_card_file_path}")
+            os.system(f"cp {template_path}/NLO_run_card.dat {run_card_file_path}")
         elif dataset_name.rsplit("_", 1)[1].startswith("madgraph"):
-            os.system(f"cp {tamplate_path}/LO_run_card.dat {run_card_file_path}")
+            os.system(f"cp {template_path}/LO_run_card.dat {run_card_file_path}")
         else:
             self.logger.error('Could not find "amcatnlo" or "madgraph" in "%s"', dataset_name)
             raise Exception()
@@ -188,7 +188,7 @@ class Gridpack():
 
     def prepare_customize_card(self):
         """
-        Copy cards from "scheme" directory and customize them
+        Copy cards from "modelparams" directory and customize them
         """
         dataset_dict = self.get_dataset_dict()
         scheme_name = dataset_dict.get('scheme')
@@ -199,7 +199,7 @@ class Gridpack():
         generator = self.data['generator']
         dataset_name = self.data['dataset']
         files_dir = Config.get('gridpack_files_path')
-        scheme_file = os.path.join(files_dir, 'campaigns', campaign, 'template', generator, 'scheme', scheme_name)
+        scheme_file = os.path.join(files_dir, 'campaigns', campaign, generator, 'modelparams', scheme_name)
         customized_file = os.path.join(self.local_dir(), 'input_cards',  f'{dataset_name}_customizecards.dat')
         self.logger.debug('Reading scheme file %s', scheme_file)
         with open(scheme_file) as scheme_file:
@@ -228,13 +228,21 @@ class Gridpack():
         powheg_steering_file= os.path.join(local_cards_path, 'powheg.input')
         powheg_steering = open(powheg_steering_file, 'wt')        
         # fill with content of process specific template and adjust settings like beam energy, ...
+        dataset_dict = self.get_dataset_dict()
+        powheg_process=dataset_dict["powheg_process"]
         files_path = Config.get('gridpack_files_path')
+        campaign = self.data['campaign']
         generator = self.data['generator']
-        process = self.data['process']
-        process_template_file = os.path.join(files_path, 'cards', generator, 'template', process+'.input')
+        process_template_file = os.path.join(files_path, 'campaigns', campaign, generator, 'templates')+'/'+powheg_process+'.input'
+        if not os.path.exists(process_template_file):
+            self.logger.error('Could not find process template %s', process_template_file)
+        else:
+            self.logger.debug('Start filling %s with process %s template %s', powheg_steering_file, powheg_process, process_template_file)
         beam = str(self.data['beam'])
+        self.logger.debug('Going to use beamenergy of %s', beam)
         # agrohsje: still sync strategy for PDF and fix pdf input 
         pdf = "325300"
+        self.logger.debug('Going to use LHAPDF %s', pdf)
         for line in fileinput.input(files = process_template_file):         
             line = line.replace('$ebeam1', beam)
             line = line.replace('$ebeam2', beam)
@@ -246,13 +254,18 @@ class Gridpack():
         # add campaign and user specific settings to powheg steering file 
         powheg_steering = open(powheg_steering_file, 'a')        
         # append campaign specific settings for process 
-        campaign = self.data['campaign']
-        modelparams_file = os.path.join(files_path, 'campaigns', campaign, 'template', generator, 'modelparams')+'/'+process+'.input'
+
+        modelparams_file = os.path.join(files_path, 'campaigns', campaign, generator, 'modelparams')+'/'+powheg_process+'.input'
+        if not os.path.exists(modelparams_file):
+            self.logger.error('Could not find model parameters %s for process %s', modelparams_file, powheg_process)
+            raise Exception()
         self.logger.debug('Appeding content of %s to %s', modelparams_file, powheg_steering_file)
         modelparams = open(modelparams_file, 'r')
         powheg_steering.write(modelparams.read())
         # append user specific settings 
-        dataset_dict = self.get_dataset_dict()
+        if not 'powheg_card' in dataset_dict:
+            self.logger.error('Could not find powheg_card block in dataset dictionary')
+            raise Exception()
         for user_line in dataset_dict.get('powheg_card', []):
             self.logger.debug('Appeding %s', user_line)
             powheg_steering.write(user_line+'\n')
@@ -266,18 +279,23 @@ class Gridpack():
         self.logger.debug('Preparing card with Powheg process name')
         local_cards_path = os.path.join(self.local_dir(), 'input_cards')
         pathlib.Path(local_cards_path).mkdir(parents=True, exist_ok=True)
-        process_name_file= os.path.join(local_cards_path, 'process.input')
-        process_name = open(process_name_file, 'wt')        
-        process = self.data['process']        
-        process_name.write(process+'\n')
-        process_name.close()
+        powheg_process_name_file= os.path.join(local_cards_path, 'process.dat')
+        powheg_process_name = open(powheg_process_name_file, 'wt')        
+        dataset_dict = self.get_dataset_dict()
+        if not 'powheg_process' in dataset_dict:
+            self.logger.error('Could not find powheg_process block in dataset dictionary')
+            raise Exception()
+        powheg_process = dataset_dict.get('powheg_process')
+        powheg_process_name.write(powheg_process+'\n')
+        self.logger.debug('Add Powheg process name %s to %s', powheg_process, powheg_process_name_file)
+        powheg_process_name.close()
         
     def prepare_card_archive(self):
         """
         Make an archive with all necessary card files
         """
         generator = self.data["generator"]
-        if generator == "Madgraph5_aMCatNLO":
+        if generator == "MadGraph5_aMCatNLO":
             self.prepare_default_card()
             self.prepare_run_card()
             self.prepare_customize_card()
