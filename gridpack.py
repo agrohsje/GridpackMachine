@@ -159,7 +159,7 @@ class Gridpack():
         generator = self.data['generator']
         dataset_name = self.data['dataset']
         files_dir = Config.get('gridpack_files_path')
-        template_path = os.path.join(files_dir, 'campaigns', campaign, generator, 'templates')
+        template_path = os.path.join(files_dir, 'Campaigns', campaign, generator, 'Templates')
         run_card_file_path = os.path.join(self.local_dir(), 'input_cards', f'{dataset_name}_run_card.dat')
         if dataset_name.rsplit("_", 1)[1].startswith("amcatnlo"):
             os.system(f"cp {template_path}/NLO_run_card.dat {run_card_file_path}")
@@ -199,7 +199,7 @@ class Gridpack():
         generator = self.data['generator']
         dataset_name = self.data['dataset']
         files_dir = Config.get('gridpack_files_path')
-        scheme_file = os.path.join(files_dir, 'campaigns', campaign, generator, 'modelparams', scheme_name)
+        scheme_file = os.path.join(files_dir, 'Campaigns', campaign, generator, 'ModelParams', scheme_name)
         customized_file = os.path.join(self.local_dir(), 'input_cards',  f'{dataset_name}_customizecards.dat')
         self.logger.debug('Reading scheme file %s', scheme_file)
         with open(scheme_file) as scheme_file:
@@ -233,7 +233,7 @@ class Gridpack():
         files_path = Config.get('gridpack_files_path')
         campaign = self.data['campaign']
         generator = self.data['generator']
-        process_template_file = os.path.join(files_path, 'campaigns', campaign, generator, 'templates')+'/'+powheg_process+'.input'
+        process_template_file = os.path.join(files_path, 'Campaigns', campaign, generator, 'Templates')+'/'+powheg_process+'.input'
         if not os.path.exists(process_template_file):
             self.logger.error('Could not find process template %s', process_template_file)
         else:
@@ -255,7 +255,7 @@ class Gridpack():
         powheg_steering = open(powheg_steering_file, 'a')        
         # append campaign specific settings for process 
 
-        modelparams_file = os.path.join(files_path, 'campaigns', campaign, generator, 'modelparams')+'/'+powheg_process+'.input'
+        modelparams_file = os.path.join(files_path, 'Campaigns', campaign, generator, 'ModelParams')+'/'+powheg_process+'.input'
         if not os.path.exists(modelparams_file):
             self.logger.error('Could not find model parameters %s for process %s', modelparams_file, powheg_process)
             raise Exception()
